@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Afterimage Lab</title>
+<style>
+  :root{--bg:#111316;--card:#1b1e23;--line:#2c3038;--text:#e9ebef;--dim:#9aa1ad;--accent:#ff3b3b;--ok:#3ddc84}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body.running{overflow:hidden}
+  header{position:sticky;top:0;z-index:2;background:var(--bg);padding:14px 16px 0;border-bottom:1px solid var(--line)}
+  h1{margin:0 0 10px;font-size:20px;letter-spacing:.2px}
+  h1 span{color:var(--accent)}
+  nav{display:flex;gap:4px}
+  nav button{flex:1;background:none;border:0;border-bottom:3px solid transparent;color:var(--dim);padding:10px 4px;font:600 14px system-ui;cursor:pointer}
+  nav button.on{color:var(--text);border-color:var(--accent)}
+  main{max-width:760px;margin:0 auto;padding:16px}
+  .how{margin:0 0 12px;color:var(--dim)}
+  .prev{display:flex;gap:6px;position:relative;border-radius:8px}
+  .prev canvas{flex:1;min-width:0;width:100%;height:auto;border-radius:8px;display:block}
+  #f-prev canvas,#s-prev canvas{cursor:crosshair}
+  .prev.drop{outline:2px dashed var(--ok);outline-offset:3px}
+  .prev.drop::after{content:attr(data-drop);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);color:#fff;font:600 16px system-ui;border-radius:8px;pointer-events:none;text-align:center;padding:10px}
+  .prev.moving{touch-action:none;outline:2px dashed var(--accent);outline-offset:3px}
+  .prev.moving canvas{cursor:crosshair}
+  .hint{font-size:13px;color:var(--dim);margin:6px 0 12px}
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
+  .file,button.ghost{background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 12px;font:500 14px system-ui;cursor:pointer}
+  .file input{display:none}
+  button.ghost.on{border-color:var(--accent);color:var(--accent)}
+  .inline{display:flex;align-items:center;gap:8px;font-size:14px}
+  .set{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:12px;margin-bottom:14px}
+  .set label{display:grid;gap:6px;font-size:14px}
+  .set label.chk{display:flex;align-items:center;gap:8px}
+  .set b{color:var(--text);font-weight:600}
+  .set h3{margin:0;font-size:14px}
+  select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px;font:14px system-ui}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  textarea{width:100%;min-height:110px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:12px ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+  .svgpaste{margin:-4px 0 14px}
+  .svgpaste .row{margin:8px 0 0}
+  button.go{width:100%;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:14px;font:700 16px system-ui;cursor:pointer}
+  details{margin-top:14px;color:var(--dim);font-size:13px}
+  details summary{cursor:pointer;color:var(--text)}
+  .cam{position:relative;width:220px;max-width:100%;border-radius:8px;overflow:hidden;background:#000}
+  .cam video,.cam canvas{display:block;width:100%;height:auto;transform:scaleX(-1)}
+  .cam canvas{position:absolute;inset:0;height:100%}
+  #track-status.ok{color:var(--ok)}
+
+  #run{position:fixed;inset:0;z-index:10;background:#000;user-select:none;-webkit-user-select:none;overflow:hidden}
+  #stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:2vw}
+  #stage canvas{display:block;will-change:transform}
+  #cue{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#ddd;padding:6px 12px;border-radius:20px;font:600 14px system-ui;white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis}
+  #cue:empty{display:none}
+  #timer{position:absolute;right:14px;bottom:max(10px,env(safe-area-inset-bottom));color:rgba(255,255,255,.35);font:600 15px system-ui}
+  #after{position:absolute;left:0;right:0;bottom:max(18px,env(safe-area-inset-bottom));text-align:center;color:rgba(0,0,0,.45);font:600 15px system-ui}
+  #after .small{font-weight:400;font-size:12px;margin-top:4px}
+  #exit{position:absolute;top:max(8px,env(safe-area-inset-top));right:10px;background:rgba(128,128,128,.25);color:#999;border:0;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>Afterimage <span>●</span> Lab</h1>
+  <nav>
+    <button class="on" data-tab="classic">Classic</button>
+    <button data-tab="flip">2-eye flip</button>
+    <button data-tab="stereo">3D</button>
+  </nav>
+</header>
+
+<main>
+  <!-- CLASSIC -->
+  <section id="tab-classic" class="tab">
+    <p class="how">Stare at the red dot on the inverted image. When the screen goes blank, blink a few times and the image appears in its real colours.</p>
+    <div class="prev" id="c-prev" data-drop="Drop an image or SVG"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="c-move" class="ghost">Move dot</button>
+      <button id="c-center" class="ghost">Center dot</button>
+    </div>
+    <p class="hint" id="c-hint">Press “Move dot”, then tap or drag on the image. On a laptop you can also drag a file onto the image.</p>
+    <div class="row">
+      <label class="file">Load photo / SVG<input type="file" accept="image/*,.svg" id="c-file"></label>
+      <button id="c-demo" class="ghost">Demo</button>
+    </div>
+    <details class="svgpaste"><summary>Paste SVG code</summary>
+      <textarea id="c-svgtext" placeholder='&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"&gt;&#10;  &lt;rect width="400" height="300" fill="#1e6fd9"/&gt;&#10;  &lt;circle cx="200" cy="150" r="80" fill="#ffd21f"/&gt;&#10;&lt;/svg&gt;'></textarea>
+      <div class="row"><button id="c-svgapply" class="ghost">Use this SVG</button></div>
+    </details>
+    <div class="set">
+      <label>Stare time <b><output id="c-stare-o"></output> s</b><input type="range" id="c-stare" min="10" max="60" value="25"></label>
+      <label>Blank screen
+        <select id="c-blank"><option value="#ffffff">White</option><option value="#d9d9d9" selected>Light grey</option><option value="#9a9a9a">Mid grey</option></select>
+      </label>
+      <label class="chk"><input type="checkbox" id="c-centre" checked> Put the dot at screen centre</label>
+      <label class="chk"><input type="checkbox" id="c-timer" checked> Show countdown</label>
+      <label class="chk"><input type="checkbox" id="c-sound" checked> Beeps</label>
+    </div>
+    <div class="set">
+      <h3>Head tracking <span style="color:var(--dim);font-weight:400">(experimental)</span></h3>
+      <label class="chk"><input type="checkbox" id="c-track"> Use the camera to make the image follow your head</label>
+      <div id="c-track-ui" hidden style="display:grid;gap:12px">
+        <div class="cam"><video id="cam" playsinline muted></video><canvas id="cam-ov"></canvas></div>
+        <p class="hint" id="track-status" style="margin:0">Starting camera…</p>
+        <label>Follow strength <b><output id="c-gain-o"></output> %</b><input type="range" id="c-gain" min="0" max="200" value="100"></label>
+        <label class="chk"><input type="checkbox" id="c-zoom" checked> Also follow distance (lean in / out)</label>
+        <label class="chk"><input type="checkbox" id="c-rev"> Reverse left / right</label>
+      </div>
+    </div>
+    <button class="go" data-start="classic">Start</button>
+    <details><summary>Tips</summary>Dim room, screen brightness up, hold your eyes still on the dot. High-contrast, colourful pictures work best.<br><br>Head tracking: the image shifts with your head so the dot stays straight ahead of your eyes, a bit like the New 3DS face tracking. Your starting position counts as “centre”; press <b>C</b> during a run to re-centre. Tune “Follow strength” until the dot seems to stay put in front of you. The camera needs HTTPS or localhost (GitHub Pages is fine).</details>
+  </section>
+
+  <!-- FLIP -->
+  <section id="tab-flip" class="tab" hidden>
+    <p class="how">Two frames, one per eye. After staring, open both eyes and wink left · right · left · right — the afterimage flips between the frames.</p>
+    <div class="prev" id="f-prev" data-drop="Drop on the left or right half · or drop two files at once"></div>
+    <p class="hint">Left = frame A (left eye), right = frame B (right eye). Tap to move the dot — it stays in the same spot on both. Photos and SVGs both work.</p>
+    <div class="row">
+      <label class="file">Frame A<input type="file" accept="image/*,.svg" id="f-fileA"></label>
+      <label class="file">Frame B<input type="file" accept="image/*,.svg" id="f-fileB"></label>
+      <button id="f-swapLR" class="ghost">Swap A/B</button>
+      <button id="f-demo" class="ghost">Demo</button>
+    </div>
+    <div class="set">
+      <label>Method
+        <select id="f-method">
+          <option value="interleave">Interleaved — cover one eye at a time</option>
+          <option value="parallel">Side by side — parallel / stereo viewer</option>
+          <option value="cross">Side by side — cross-eyed</option>
+        </select>
+      </label>
+      <label id="f-swap-row">Switch eyes every <b><output id="f-swap-o"></output> s</b><input type="range" id="f-swap" min="2" max="8" value="4"></label>
+      <label id="f-panel-row">Panel width <b><output id="f-panel-o"></output> vw</b><input type="range" id="f-panel" min="15" max="50" value="40"></label>
+      <label>Total stare <b><output id="f-stare-o"></output> s</b><input type="range" id="f-stare" min="10" max="90" value="40"></label>
+      <label>Blank screen
+        <select id="f-blank"><option value="#ffffff">White</option><option value="#d9d9d9" selected>Light grey</option><option value="#9a9a9a">Mid grey</option></select>
+      </label>
+      <label class="chk"><input type="checkbox" id="f-timer" checked> Show countdown</label>
+      <label class="chk"><input type="checkbox" id="f-sound" checked> Beep on eye switch</label>
+    </div>
+    <button class="go" data-start="flip">Start</button>
+    <details><summary>Tips</summary>Interleaved: the image swaps when it beeps — move your hand to cover the other eye. Keep looking at the same dot position. Two similar frames (a small change between them) read best as motion. When dropping two files at once they're sorted by name, so frame1 / frame2 land in order.</details>
+  </section>
+
+  <!-- 3D -->
+  <section id="tab-stereo" class="tab" hidden>
+    <p class="how">A stereo pair, one image per eye. After staring, open both eyes on the blank screen and the afterimages fuse into depth.</p>
+    <div class="prev" id="s-prev" data-drop="Drop here"></div>
+    <p class="hint">Left = left-eye view, right = right-eye view. Tap to move the dot. Photos and SVGs both work.</p>
+    <div class="row">
+      <label class="inline">Source
+        <select id="s-src">
+          <option value="two">Two images (left + right)</option>
+          <option value="sbs">One side-by-side image</option>
+        </select>
+      </label>
+    </div>
+    <div class="row" id="s-two-row">
+      <label class="file">Left image<input type="file" accept="image/*,.svg" id="s-fileA"></label>
+      <label class="file">Right image<input type="file" accept="image/*,.svg" id="s-fileB"></label>
+      <button id="s-swapLR" class="ghost">Swap L/R</button>
+      <button id="s-demo" class="ghost">Demo</button>
+    </div>
+    <div class="row" id="s-sbs-row" hidden>
+      <label class="file">Side-by-side image<input type="file" accept="image/*,.svg" id="s-fileSBS"></label>
+      <label class="inline"><input type="checkbox" id="s-crossed"> Cross-eyed layout (R | L)</label>
+      <button id="s-swapLR2" class="ghost">Swap L/R</button>
+      <button id="s-demo2" class="ghost">Demo</button>
+    </div>
+    <div class="set">
+      <label>Method
+        <select id="s-method">
+          <option value="interleave">Interleaved — cover one eye at a time</option>
+          <option value="parallel">Side by side — parallel / stereo viewer</option>
+          <option value="cross">Side by side — cross-eyed</option>
+        </select>
+      </label>
+      <label id="s-swap-row">Switch eyes every <b><output id="s-swap-o"></output> s</b><input type="range" id="s-swap" min="2" max="8" value="4"></label>
+      <label id="s-panel-row">Panel width <b><output id="s-panel-o"></output> vw</b><input type="range" id="s-panel" min="15" max="50" value="40"></label>
+      <label>Total stare <b><output id="s-stare-o"></output> s</b><input type="range" id="s-stare" min="10" max="90" value="40"></label>
+      <label>Blank screen
+        <select id="s-blank"><option value="#ffffff">White</option><option value="#d9d9d9" selected>Light grey</option><option value="#9a9a9a">Mid grey</option></select>
+      </label>
+      <label class="chk"><input type="checkbox" id="s-timer" checked> Show countdown</label>
+      <label class="chk"><input type="checkbox" id="s-sound" checked> Beep on eye switch</label>
+    </div>
+    <button class="go" data-start="stereo">Start</button>
+    <details><summary>Tips</summary>Most stereo photos online are parallel (L | R). Cross-view photos are R | L — tick “Cross-eyed layout” for those. If the depth looks inside-out, hit Swap L/R. For a phone in a Cardboard-style viewer, pick “parallel” and set panel width to ~48 vw in landscape.</details>
+  </section>
+</main>
+
+<div id="run" hidden>
+  <div id="stage"></div>
+  <div id="cue"></div>
+  <div id="timer"></div>
+  <div id="after" hidden><div id="after-main"></div><div class="small">Tap anywhere to exit</div></div>
+  <button id="exit" aria-label="Exit">✕</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const P = {classic:'c', flip:'f', stereo:'s'};
+const MAXD = 900;
+const mk = (w,h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const dims = im => [im.naturalWidth || im.width, im.naturalHeight || im.height];
+const clamp = v => Math.min(1, Math.max(0, v));
+function circle(x,cx,cy,r){ x.beginPath(); x.arc(cx,cy,r,0,Math.PI*2); x.fill(); }
+
+/* ---------- demo images ---------- */
+function demoLandscape(){
+  const w=800,h=600,c=mk(w,h),x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,h*.6); g.addColorStop(0,'#1e6fd9'); g.addColorStop(1,'#9fd3ff');
+  x.fillStyle=g; x.fillRect(0,0,w,h);
+  x.fillStyle='#ffd21f'; circle(x,640,110,55);
+  x.fillStyle='#ffffff'; circle(x,180,120,35); circle(x,222,104,45); circle(x,266,124,32);
+  x.fillStyle='#2f9e44'; x.beginPath(); x.moveTo(0,380); x.quadraticCurveTo(200,280,420,370); x.quadraticCurveTo(620,450,800,340); x.lineTo(800,600); x.lineTo(0,600); x.fill();
+  x.fillStyle='#1b7a32'; x.beginPath(); x.moveTo(0,470); x.quadraticCurveTo(300,400,800,480); x.lineTo(800,600); x.lineTo(0,600); x.fill();
+  x.fillStyle='#d62828'; x.fillRect(330,330,140,110);
+  x.fillStyle='#5a2d0c'; x.beginPath(); x.moveTo(315,335); x.lineTo(400,265); x.lineTo(485,335); x.fill();
+  x.fillStyle='#fff3b0'; x.fillRect(350,355,35,30); x.fillRect(415,355,35,30);
+  x.fillStyle='#3d2208'; x.fillRect(385,390,30,50);
+  x.fillStyle='#6b3e1f'; x.fillRect(165,330,22,90);
+  x.fillStyle='#38b000'; circle(x,176,305,58);
+  return c;
+}
+function demoPendulum(side){
+  const w=800,h=600,c=mk(w,h),x=c.getContext('2d');
+  x.fillStyle='#8ecae6'; x.fillRect(0,0,w,h);
+  x.fillStyle='#219ebc'; x.fillRect(0,520,w,80);
+  x.fillStyle='#023047'; x.fillRect(250,24,300,18);
+  const a=side*0.55, L=420, bx=400+L*Math.sin(a), by=40+L*Math.cos(a);
+  x.strokeStyle='#023047'; x.lineWidth=5; x.beginPath(); x.moveTo(400,40); x.lineTo(bx,by); x.stroke();
+  x.fillStyle='rgba(2,48,71,.35)'; x.beginPath(); x.ellipse(bx,545,60,12,0,0,Math.PI*2); x.fill();
+  x.fillStyle='#e63946'; circle(x,bx,by,55);
+  x.fillStyle='#ffb4b9'; circle(x,bx-18,by-18,14);
+  return c;
+}
+function demoStereo(eye){ // eye: -1 left, +1 right
+  const w=800,h=600,c=mk(w,h),x=c.getContext('2d');
+  const sh = d => -eye*d/2;               // d>0 = in front of screen
+  let s=12345; const rnd=()=>(s=(s*1103515245+12345)%2147483648)/2147483648;
+  const T=40, bg=sh(-8);
+  for(let ty=0; ty<h; ty+=T) for(let tx=-T; tx<w+T; tx+=T){
+    x.fillStyle=`hsl(${200+rnd()*40},35%,${28+rnd()*22}%)`; x.fillRect(tx+bg,ty,T,T);
+  }
+  x.fillStyle='#d000c8'; x.beginPath(); x.arc(190+sh(6),160,72,0,Math.PI*2); x.arc(190+sh(6),160,38,0,Math.PI*2,true); x.fill();
+  x.fillStyle='#2bd94a'; x.beginPath(); x.moveTo(190+sh(3),340); x.lineTo(290+sh(3),520); x.lineTo(90+sh(3),520); x.fill();
+  x.fillStyle='#ff7a00'; x.fillRect(530+sh(12),110,140,140);
+  x.fillStyle='#ffe600'; circle(x,600+sh(22),430,82);
+  x.fillStyle='#ffffff'; circle(x,600+sh(26),430,22);
+  return c;
+}
+const DEMOS = {
+  classic: () => [demoLandscape()],
+  flip:    () => [demoPendulum(-1), demoPendulum(1)],
+  stereo:  () => [demoStereo(-1), demoStereo(1)]
+};
+
+/* ---------- image loading (photos + SVG) ---------- */
+function loadImgURL(url){
+  return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error('Could not load that image')); im.src=url; });
+}
+const loadImg = file => loadImgURL(URL.createObjectURL(file));
+
+/* SVG: give it a real pixel size so it rasterises crisply, then load as an image */
+function loadSVGText(text){
+  text = text.trim();
+  if(/<svg\b/i.test(text) && !/<svg\b[^>]*\bxmlns\s*=/i.test(text)) text = text.replace(/<svg\b/i,'<svg xmlns="http://www.w3.org/2000/svg"');
+  const doc = new DOMParser().parseFromString(text,'image/svg+xml'), svg = doc.documentElement;
+  if(doc.querySelector('parsererror') || !svg || svg.localName!=='svg') return Promise.reject(new Error('That doesn’t look like valid SVG'));
+  const num = a => { const v=svg.getAttribute(a); return v && !v.includes('%') && parseFloat(v)>0 ? parseFloat(v) : null; };
+  let w=num('width'), h=num('height');
+  const vb=(svg.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+  const hasVB = vb.length===4 && vb.every(Number.isFinite) && vb[2]>0 && vb[3]>0;
+  if(!(w && h)){ if(hasVB){ w=vb[2]; h=vb[3]; } else { w=w||300; h=h||150; } }
+  if(!hasVB) svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  const k = (MAXD*2)/Math.max(w,h);   // extra resolution so a split side-by-side SVG stays sharp
+  svg.setAttribute('width', Math.round(w*k)); svg.setAttribute('height', Math.round(h*k));
+  const blob = new Blob([new XMLSerializer().serializeToString(svg)], {type:'image/svg+xml'});
+  return loadImgURL(URL.createObjectURL(blob));
+}
+const isSVG = f => f.type==='image/svg+xml' || /\.svg$/i.test(f.name);
+const isImageFile = f => (f.type||'').startsWith('image/') || /\.svg$/i.test(f.name);
+const loadAny = async f => isSVG(f) ? loadSVGText(await f.text()) : loadImg(f);
+
+function splitSBS(im, crossed){
+  const [w,h]=dims(im), hw=Math.floor(w/2);
+  const L=mk(hw,h), R=mk(hw,h);
+  L.getContext('2d').drawImage(im,0,0,hw,h,0,0,hw,h);
+  R.getContext('2d').drawImage(im,hw,0,hw,h,0,0,hw,h);
+  return crossed ? [R,L] : [L,R];
+}
+
+/* ---------- processing ---------- */
+function invert(c){
+  const x=c.getContext('2d'), d=x.getImageData(0,0,c.width,c.height), p=d.data;
+  for(let i=0;i<p.length;i+=4){ p[i]=255-p[i]; p[i+1]=255-p[i+1]; p[i+2]=255-p[i+2]; }
+  x.putImageData(d,0,0); return c;
+}
+function decorate(inv, dot, frame){
+  const c=mk(inv.width,inv.height), x=c.getContext('2d'), m=Math.min(c.width,c.height);
+  x.drawImage(inv,0,0);
+  if(frame){ const b=Math.round(m*.025); x.lineWidth=b; x.strokeStyle='#777'; x.strokeRect(b/2,b/2,c.width-b,c.height-b); }
+  const r=Math.max(4,m*.012);
+  x.beginPath(); x.arc(dot.x*c.width, dot.y*c.height, r, 0, Math.PI*2);
+  x.fillStyle='#ff1a1a'; x.fill(); x.lineWidth=Math.max(1,r*.25); x.strokeStyle='#000'; x.stroke();
+  return c;
+}
+
+/* ---------- state ---------- */
+const state = {};
+for(const m in P) state[m] = {raw:DEMOS[m](), inv:[], dot:{x:.5,y:.5}};
+let sbsSource = null;   // last side-by-side image, so the crossed toggle can re-split it
+
+function rebuild(m){
+  const st=state[m], [iw,ih]=dims(st.raw[0]), k=Math.min(1,MAXD/Math.max(iw,ih));
+  const w=Math.round(iw*k), h=Math.round(ih*k);
+  st.inv = st.raw.map(im=>{
+    const c=mk(w,h), x=c.getContext('2d'), [a,b]=dims(im), s=Math.max(w/a,h/b);
+    x.fillStyle='#fff'; x.fillRect(0,0,w,h);   // transparent areas (SVG/PNG) count as white
+    x.drawImage(im,(w-a*s)/2,(h-b*s)/2,a*s,b*s);
+    return invert(c);
+  });
+  preview(m);
+}
+function preview(m){
+  const st=state[m], box=$(P[m]+'-prev'); box.innerHTML='';
+  st.inv.forEach(c=>box.appendChild(decorate(c,st.dot,m!=='classic')));
+}
+async function setRaw(m, fn){
+  try{ await fn(); rebuild(m); } catch(err){ alert(err.message || 'Could not load that image'); }
+}
+
+/* ---------- UI wiring ---------- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.tab').forEach(s=>s.hidden = s.id!=='tab-'+b.dataset.tab);
+});
+document.querySelectorAll('input[type=range]').forEach(r=>{
+  const o=$(r.id+'-o'), u=()=>o.textContent=r.value; r.addEventListener('input',u); u();
+});
+for(const m in P){
+  const p=P[m];
+  if(m!=='classic') $(p+'-prev').addEventListener('click',e=>{
+    if(e.target.tagName!=='CANVAS') return;
+    const r=e.target.getBoundingClientRect();
+    state[m].dot={x:clamp((e.clientX-r.left)/r.width), y:clamp((e.clientY-r.top)/r.height)};
+    preview(m);
+  });
+  rebuild(m);
+}
+const demo = m => { state[m].raw=DEMOS[m](); state[m].dot={x:.5,y:.5}; sbsSource=null; rebuild(m); };
+$('c-demo').onclick=()=>demo('classic');
+$('f-demo').onclick=()=>demo('flip');
+$('s-demo').onclick=$('s-demo2').onclick=()=>demo('stereo');
+
+/* classic: photo / SVG file / pasted SVG */
+$('c-file').onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f) setRaw('classic', async()=>{ state.classic.raw=[await loadAny(f)]; }); };
+$('c-svgapply').onclick=()=>{ const t=$('c-svgtext').value; if(t.trim()) setRaw('classic', async()=>{ state.classic.raw=[await loadSVGText(t)]; }); };
+
+/* classic: move-dot mode (tap or drag) */
+let moving=false, dragging=false, pendingDot=null;
+const cprev=$('c-prev');
+function setMoving(on){
+  moving=on; cprev.classList.toggle('moving',on);
+  $('c-move').classList.toggle('on',on); $('c-move').textContent = on ? 'Done' : 'Move dot';
+  $('c-hint').textContent = on ? 'Tap or drag on the image to place the dot.' : 'Press “Move dot”, then tap or drag on the image. On a laptop you can also drag a file onto the image.';
+}
+function dotFromEvent(e){
+  const cv=cprev.querySelector('canvas'); if(!cv) return;
+  const r=cv.getBoundingClientRect();
+  pendingDot={x:clamp((e.clientX-r.left)/r.width), y:clamp((e.clientY-r.top)/r.height)};
+  requestAnimationFrame(()=>{ if(pendingDot){ state.classic.dot=pendingDot; pendingDot=null; preview('classic'); } });
+}
+$('c-move').onclick=()=>setMoving(!moving);
+$('c-center').onclick=()=>{ state.classic.dot={x:.5,y:.5}; preview('classic'); };
+cprev.addEventListener('pointerdown',e=>{ if(!moving) return; dragging=true; cprev.setPointerCapture(e.pointerId); dotFromEvent(e); e.preventDefault(); });
+cprev.addEventListener('pointermove',e=>{ if(dragging) dotFromEvent(e); });
+['pointerup','pointercancel'].forEach(t=>cprev.addEventListener(t,()=>dragging=false));
+
+/* flip + 3D: per-eye files, swap, method */
+function syncMethod(p){ const v=$(p+'-method').value; $(p+'-swap-row').hidden = v!=='interleave'; $(p+'-panel-row').hidden = v==='interleave'; }
+for(const m of ['flip','stereo']){
+  const p=P[m];
+  ['A','B'].forEach((k,i)=>$(p+'-file'+k).onchange=e=>{
+    const f=e.target.files[0]; e.target.value=''; if(f) setRaw(m, async()=>{ state[m].raw[i]=await loadAny(f); });
+  });
+  $(p+'-method').onchange=()=>syncMethod(p); syncMethod(p);
+}
+$('f-swapLR').onclick=()=>{ state.flip.raw.reverse(); rebuild('flip'); };
+$('s-swapLR').onclick=$('s-swapLR2').onclick=()=>{ state.stereo.raw.reverse(); rebuild('stereo'); };
+
+/* 3D: source = two images or one side-by-side image */
+function syncSrc(){
+  const sbs=$('s-src').value==='sbs';
+  $('s-two-row').hidden=sbs; $('s-sbs-row').hidden=!sbs;
+  $('s-prev').dataset.drop = sbs ? 'Drop a side-by-side image or SVG' : 'Drop on the left or right half · or drop two files at once';
+}
+$('s-src').onchange=syncSrc; syncSrc();
+function useSBS(im){ sbsSource=im; state.stereo.raw=splitSBS(im,$('s-crossed').checked); }
+$('s-fileSBS').onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f) setRaw('stereo', async()=>useSBS(await loadAny(f))); };
+$('s-crossed').onchange=()=>{ if(sbsSource){ useSBS(sbsSource); rebuild('stereo'); } };
+
+/* drag & drop onto the previews (laptop); the buttons stay as the phone-friendly fallback */
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>e.preventDefault());
+const byName = (a,b) => a.name.localeCompare(b.name, undefined, {numeric:true});
+for(const m in P){
+  const box=$(P[m]+'-prev'); let depth=0;
+  box.addEventListener('dragenter',e=>{ e.preventDefault(); depth++; box.classList.add('drop'); });
+  box.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+  box.addEventListener('dragleave',()=>{ if(--depth<=0){ depth=0; box.classList.remove('drop'); } });
+  box.addEventListener('drop',e=>{
+    e.preventDefault(); e.stopPropagation(); depth=0; box.classList.remove('drop');
+    const files=[...e.dataTransfer.files].filter(isImageFile).sort(byName); if(!files.length) return;
+    const r=box.getBoundingClientRect(), side = (e.clientX-r.left) < r.width/2 ? 0 : 1;
+    setRaw(m, async()=>{
+      if(m==='classic') state.classic.raw=[await loadAny(files[0])];
+      else if(m==='stereo' && $('s-src').value==='sbs') useSBS(await loadAny(files[0]));
+      else if(files.length>=2) state[m].raw=[await loadAny(files[0]), await loadAny(files[1])];
+      else state[m].raw[side]=await loadAny(files[0]);
+    });
+  });
+}
+
+/* ---------- head tracking (MediaPipe Face Landmarker, loaded on demand) ---------- */
+/* Self-hosted: everything loads from the ./mediapipe/ folder next to this page.
+   Set ALLOW_CDN_FALLBACK = true to fall back to the internet copies if a local file is missing. */
+const ALLOW_CDN_FALLBACK = false;
+const MP_VER='0.10.3';
+const MP_LOCAL = {
+  bundle: new URL('mediapipe/vision_bundle.mjs', location.href).href,
+  wasm:   new URL('mediapipe/wasm', location.href).href,
+  model:  new URL('mediapipe/face_landmarker.task', location.href).href
+};
+const MP_CDN = {
+  bundle: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}/vision_bundle.mjs`,
+  wasm:   `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}/wasm`,
+  model:  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+};
+const IPD_MM=63, PX_PER_MM=96/25.4;   // average eye spacing; nominal CSS pixel size
+const Track = {on:false, lm:null, stream:null, raf:0, lastT:-1, eyes:null, base:null, seen:0, statusT:0};
+const cam=$('cam'), camOv=$('cam-ov'), tStatus=$('track-status');
+
+function setStatus(txt, ok){ tStatus.textContent=txt; tStatus.classList.toggle('ok',!!ok); }
+
+async function trackStart(){
+  $('c-track-ui').hidden=false;
+  try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('camera not available here (needs HTTPS or localhost)');
+    setStatus('Starting camera…');
+    Track.stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user', width:{ideal:640}, height:{ideal:480}}, audio:false});
+    cam.srcObject=Track.stream; await cam.play();
+    if(!Track.lm){
+      setStatus('Loading face tracker…');
+      Track.lm = await loadLandmarker(MP_LOCAL).catch(err=>{
+        if(!ALLOW_CDN_FALLBACK) throw new Error('face tracker files missing from ./mediapipe/ ('+err.message+')');
+        return loadLandmarker(MP_CDN);
+      });
+    }
+    if(!$('c-track').checked){ trackStop(); return; }   // switched off while loading
+    Track.on=true; setStatus('Looking for your face…');
+    trackLoop();
+  }catch(err){
+    setStatus('Tracking unavailable: '+(err.message||err.name||err));
+    trackStop(true);
+    $('c-track').checked=false;
+  }
+}
+async function loadLandmarker(src){
+  const mod = await import(src.bundle);
+  const api = mod.FaceLandmarker ? mod : mod.default;
+  const files = await api.FilesetResolver.forVisionTasks(src.wasm);
+  const opts = d => ({baseOptions:{modelAssetPath:src.model, delegate:d}, runningMode:'VIDEO', numFaces:1});
+  try{ return await api.FaceLandmarker.createFromOptions(files, opts('GPU')); }
+  catch(e){ return await api.FaceLandmarker.createFromOptions(files, opts('CPU')); }
+}
+function trackStop(keepUI){
+  Track.on=false; cancelAnimationFrame(Track.raf);
+  if(Track.stream){ Track.stream.getTracks().forEach(t=>t.stop()); Track.stream=null; }
+  cam.srcObject=null; Track.eyes=null; Track.base=null;
+  if(!keepUI) $('c-track-ui').hidden=true;
+}
+function trackLoop(){
+  if(!Track.on) return;
+  const now=performance.now();
+  if(cam.readyState>=2 && cam.currentTime!==Track.lastT){
+    Track.lastT=cam.currentTime;
+    const res=Track.lm.detectForVideo(cam, now);
+    const f=res.faceLandmarks && res.faceLandmarks[0];
+    const W=cam.videoWidth, H=cam.videoHeight;
+    if(f){
+      const a=f[468]||f[33], b=f[473]||f[263];                 // iris centres (fallback: eye corners)
+      const ax=a.x*W, ay=a.y*H, bx=b.x*W, by=b.y*H;
+      const raw={mx:(ax+bx)/2, my:(ay+by)/2, ipd:Math.hypot(bx-ax,by-ay)};
+      const s=Track.eyes, k=.35;                               // light smoothing
+      Track.eyes = s ? {mx:s.mx+(raw.mx-s.mx)*k, my:s.my+(raw.my-s.my)*k, ipd:s.ipd+(raw.ipd-s.ipd)*k} : raw;
+      Track.seen=now;
+      if(!run){                                                // preview overlay only when not running
+        camOv.width=W; camOv.height=H; const x=camOv.getContext('2d');
+        x.clearRect(0,0,W,H); x.fillStyle='#3ddc84';
+        circle(x,ax,ay,Math.max(3,W*.008)); circle(x,bx,by,Math.max(3,W*.008));
+      }
+    } else if(!run){ camOv.getContext('2d').clearRect(0,0,camOv.width,camOv.height); }
+    if(now-Track.statusT>400){
+      Track.statusT=now;
+      const ok = now-Track.seen<500;
+      setStatus(ok ? 'Tracking your eyes ✓' : 'Looking for your face…', ok);
+    }
+  }
+  Track.raf=requestAnimationFrame(trackLoop);
+}
+$('c-track').onchange=e=>{ if(e.target.checked) trackStart(); else trackStop(); };
+
+/* offset of the image (CSS px) so it follows the head since the start of the stare */
+function headTransform(cfg){
+  const e=Track.eyes;
+  if(!cfg.track || !Track.on || !e) return {x:0,y:0,s:1};
+  if(!Track.base) Track.base={...e};
+  const b=Track.base, mmPerCamPx=IPD_MM/b.ipd, g=cfg.gain/100*PX_PER_MM*mmPerCamPx;
+  // the raw camera frame is un-mirrored: moving your head to your right lowers x
+  let x=-(e.mx-b.mx)*g, y=(e.my-b.my)*g;
+  if(cfg.rev) x=-x;
+  const s = cfg.zoom ? Math.min(2,Math.max(.5,b.ipd/e.ipd)) : 1;
+  return {x,y,s};
+}
+
+/* ---------- audio ---------- */
+let actx=null;
+function ensureAudio(){ try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){} }
+function beep(f=880,d=.09){
+  if(!actx || !run || !run.cfg.sound) return;
+  const o=actx.createOscillator(), g=actx.createGain(), t=actx.currentTime;
+  o.frequency.value=f; g.gain.setValueAtTime(.15,t); g.gain.exponentialRampToValueAtTime(.001,t+d);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t+d+.02);
+  navigator.vibrate && navigator.vibrate(40);
+}
+
+/* ---------- run ---------- */
+const ov=$('run'), stage=$('stage'), cue=$('cue'), timerEl=$('timer'), after=$('after');
+const READY=3;
+let run=null, wake=null;
+
+document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>start(b.dataset.start));
+
+function start(m){
+  const p=P[m], st=state[m], classic=m==='classic';
+  if(classic) setMoving(false);
+  const cfg={
+    mode:m,
+    stare:+$(p+'-stare').value,
+    blank:$(p+'-blank').value,
+    timer:$(p+'-timer').checked,
+    sound:$(p+'-sound').checked,
+    method: classic ? 'single' : $(p+'-method').value,
+    swap: classic ? 0 : +$(p+'-swap').value,
+    panel: classic ? 0 : +$(p+'-panel').value,
+    centre: classic && $('c-centre').checked,
+    track: classic && $('c-track').checked && Track.on,
+    gain: +$('c-gain').value, zoom: $('c-zoom').checked, rev: $('c-rev').checked
+  };
+  const dec = st.inv.map(c=>decorate(c,st.dot,!classic));
+  ensureAudio();
+  const fs = ov.requestFullscreen || ov.webkitRequestFullscreen;
+  ov.hidden=false; document.body.classList.add('running');
+  if(fs){ try{ const pr=fs.call(ov); pr && pr.catch && pr.catch(()=>{}); }catch(e){} }
+  try{ navigator.wakeLock && navigator.wakeLock.request('screen').then(w=>wake=w).catch(()=>{}); }catch(e){}
+  ov.style.background='#000'; after.hidden=true; cue.textContent=''; timerEl.textContent='';
+  Track.base=null;
+  run={cfg, dec, dot:{...st.dot}, t0:performance.now(), phase:'ready', idx:-1};
+  buildStage();
+  requestAnimationFrame(tick);
+}
+
+function buildStage(){
+  const {cfg,dec}=run; stage.innerHTML='';
+  const sbs = cfg.method==='parallel' || cfg.method==='cross';
+  const srcs = sbs ? (cfg.method==='cross' ? [dec[1],dec[0]] : [dec[0],dec[1]]) : [dec[0]];
+  srcs.forEach(d=>{ const c=mk(d.width,d.height); c.getContext('2d').drawImage(d,0,0); stage.appendChild(c); });
+  stage.style.visibility='hidden';
+  layout();
+}
+function layout(){
+  if(!run) return;
+  const cs=[...stage.querySelectorAll('canvas')]; if(!cs.length) return;
+  const vw=innerWidth, vh=innerHeight, a=cs[0].width/cs[0].height;
+  let w = cs.length===1 ? vw*.96 : vw*run.cfg.panel/100, h=w/a;
+  if(h>vh*.9){ h=vh*.9; w=h*a; }
+  cs.forEach(c=>{ c.style.width=w+'px'; c.style.height=h+'px'; });
+}
+addEventListener('resize',layout);
+
+/* classic only: keep the dot at screen centre and/or follow the head */
+function placeClassic(){
+  const c=stage.firstChild; if(!c) return;
+  const {cfg,dot}=run, w=parseFloat(c.style.width), h=parseFloat(c.style.height);
+  const ox = cfg.centre ? (.5-dot.x)*w : 0, oy = cfg.centre ? (.5-dot.y)*h : 0;
+  const t=headTransform(cfg);
+  c.style.transformOrigin=`${dot.x*100}% ${dot.y*100}%`;
+  c.style.transform=`translate(${ox+t.x}px,${oy+t.y}px) scale(${t.s})`;
+}
+
+function readyText(cfg,n){
+  return {
+    interleave:`Starting in ${n} — first cover your RIGHT eye`,
+    parallel:`Starting in ${n} — relax your eyes until the red dots merge`,
+    cross:`Starting in ${n} — cross your eyes until the red dots merge`,
+    single:`Starting in ${n} — ${cfg.track ? 'get comfortable, then stare at the dot' : 'stare at the red dot'}`
+  }[cfg.method];
+}
+const AFTER = {
+  classic:'Look at the blank screen and blink',
+  flip:'Open both eyes, then wink  L · R · L · R',
+  stereo:'Open both eyes for depth — wink to compare'
+};
+
+function tick(now){
+  if(!run) return;
+  const {cfg}=run, t=(now-run.t0)/1000;
+  if(t<READY){
+    cue.textContent=readyText(cfg,Math.ceil(READY-t));
+  } else if(t<READY+cfg.stare){
+    const ts=t-READY;
+    if(run.phase==='ready'){
+      run.phase='stare'; stage.style.visibility='visible'; Track.base=null;   // head position now = centre
+      if(cfg.method!=='interleave'){ cue.textContent = cfg.method==='single' ? '' : 'Keep the dots merged — hold still'; beep(); }
+    }
+    if(cfg.method==='interleave'){
+      const idx=Math.floor(ts/cfg.swap)%2;
+      if(idx!==run.idx){
+        run.idx=idx;
+        stage.firstChild.getContext('2d').drawImage(run.dec[idx],0,0);
+        cue.textContent = idx===0 ? 'LEFT eye open · cover RIGHT' : 'RIGHT eye open · cover LEFT';
+        beep(idx ? 660 : 880);
+      }
+    }
+    if(cfg.mode==='classic') placeClassic();
+    let tt = cfg.timer ? String(Math.ceil(cfg.stare-ts)) : '';
+    if(cfg.track && now-Track.seen>500) tt = 'face lost' + (tt ? ' · '+tt : '');
+    timerEl.textContent = tt;
+  } else if(run.phase!=='after'){
+    run.phase='after';
+    stage.style.visibility='hidden'; cue.textContent=''; timerEl.textContent='';
+    ov.style.background=cfg.blank;
+    $('after-main').textContent=AFTER[cfg.mode]; after.hidden=false;
+    beep(520,.25);
+  }
+  if(run.phase==='ready' && cfg.mode==='classic') placeClassic();
+  requestAnimationFrame(tick);
+}
+
+function stop(){
+  run=null; ov.hidden=true; document.body.classList.remove('running'); stage.innerHTML='';
+  if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+  if(wake){ wake.release().catch(()=>{}); wake=null; }
+}
+$('exit').onclick=e=>{ e.stopPropagation(); stop(); };
+ov.addEventListener('click',()=>{ if(run && run.phase==='after') stop(); });
+addEventListener('keydown',e=>{
+  if(!run) return;
+  if(e.key==='Escape') stop();
+  if((e.key==='c'||e.key==='C') && run.cfg.track) Track.base=null;   // re-centre head tracking
+});
+</script>
+</body>
+</html>
